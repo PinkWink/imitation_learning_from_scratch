@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Imitation Learning Code Diagrams</title>
+    <style>
+      :root {
+        --bg: #f2f5f9;
+        --card: #ffffff;
+        --ink: #0f172a;
+        --muted: #475569;
+        --line: #cbd5e1;
+        --accent: #0ea5e9;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family:
+          "Segoe UI",
+          "Noto Sans",
+          "Apple SD Gothic Neo",
+          sans-serif;
+        color: var(--ink);
+        background: linear-gradient(180deg, #e7edf5 0%, var(--bg) 100%);
+      }
+      .wrap {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 28px 20px 44px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 30px;
+      }
+      p.lead {
+        margin: 0 0 24px;
+        color: var(--muted);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px 14px 6px;
+        box-shadow: 0 6px 20px rgba(2, 12, 27, 0.05);
+      }
+      .card h2 {
+        margin: 2px 6px 8px;
+        font-size: 18px;
+      }
+      .card p {
+        margin: 0 6px 10px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .mermaid {
+        overflow: auto;
+        border-top: 1px dashed #e2e8f0;
+        padding-top: 10px;
+      }
+      .foot {
+        margin-top: 16px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      code {
+        background: #eff6ff;
+        border: 1px solid #dbeafe;
+        border-radius: 6px;
+        padding: 1px 5px;
+      }
+      a {
+        color: var(--accent);
+      }
+      @media (min-width: 1180px) {
+        .grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        .card.wide {
+          grid-column: 1 / span 2;
+        }
+      }
+    </style>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: "default",
+        flowchart: {
+          curve: "basis",
+          htmlLabels: true,
+        },
+        sequence: {
+          showSequenceNumbers: true,
+        },
+      });
+    </script>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Imitation Learning Code Diagrams</h1>
+      <p class="lead">
+        Code scope: <code>keyboard_imitation_matplotlib.py</code> and
+        <code>data_view_panel.py</code>
+      </p>
+
+      <div class="grid">
+        <section class="card wide">
+          <h2>1) Overall Runtime Block Flow</h2>
+          <p>
+            App init, UI wiring, animation loop, and branch behavior for collect/inference.
+          </p>
+          <div class="mermaid">
+flowchart LR
+  A["Program Start<br/>ImitationRoadDemo()"] --> B["Setup:<br/>axes, robot, buttons, status text,<br/>DataViewPanel, key/mouse events"]
+  B --> C["FuncAnimation update loop<br/>every dt=0.05s"]
+
+  C --> D["Capture scene RGB<br/>_snapshot_scene_rgb()"]
+  D --> E["Update observation overlay<br/>_update_observation_overlay()"]
+
+  E --> F{"mode?"}
+  F -->|collect| G["Read keyboard action<br/>_manual_action()"]
+  F -->|infer| H["Predict ACT action<br/>_predict_act_action()"]
+  F -->|idle| I["No command or manual idle"]
+
+  G --> J["Capture sample if needed<br/>_capture_sample_if_needed()"]
+  H --> K["EMA smoothing on action<br/>infer_action = 0.15*old + 0.85*pred"]
+  I --> L["action = zeros / manual"]
+
+  J --> M["Step robot kinematics<br/>_step_robot()"]
+  K --> M
+  L --> M
+  M --> N["Update robot artists"]
+        </div>
+        </section>
+
+        <section class="card">
+          <h2>2) UI + Event Sequence</h2>
+          <p>Button and key events across main app, ACT model, filesystem, and Data View panel.</p>
+          <div class="mermaid">
+sequenceDiagram
+  autonumber
+  actor U as User
+  participant UI as Matplotlib UI
+  participant App as ImitationRoadDemo
+  participant FS as Dataset Files (.npz)
+  participant ACT as ACTPolicy
+  participant DV as DataViewPanel
+
+  U->>UI: Click "Collect Data"
+  UI->>App: _on_collect_clicked()
+  App->>App: mode = collect, reset robot
+  loop each frame
+    U->>UI: W/S/A/D key input
+    UI->>App: key events
+    App->>App: _capture_sample_if_needed()
+  end
+  U->>UI: Space or Collect again
+  UI->>App: _finish_collection()
+  App->>FS: save set_XXXX.npz (images, actions, image_source)
+
+  U->>UI: Click "ACT Train"
+  UI->>App: _on_act_train_clicked()
+  App->>FS: load all valid sets
+  App->>ACT: train for 30 epochs
+  ACT-->>App: trained model
+
+  U->>UI: Click "ACT Inference"
+  UI->>App: _on_act_infer_clicked()
+  loop each frame
+    App->>ACT: forward(seq of recent frames)
+    ACT-->>App: [v, w]
+    App->>App: robot step + render
+  end
+
+  U->>UI: Click "Data View"
+  UI->>App: _on_data_view_clicked()
+  App->>DV: show_or_focus()
+  DV->>FS: read set files, draw distributions
+  U->>DV: Play / Delete / Refresh
+  alt Delete selected set
+    DV->>FS: remove file
+    DV->>App: on_dataset_deleted()
+    App->>App: refresh dataset count
+  end
+        </div>
+        </section>
+
+        <section class="card">
+          <h2>3) Data Lifecycle Block Diagram</h2>
+          <p>How one collected set becomes training data and inference input.</p>
+          <div class="mermaid">
+flowchart TD
+  A["Scene Frame (RGB)"] --> B["Local crop around robot<br/>obs_patch_size"]
+  B --> C["Stored as image sample"]
+  D["Keyboard action [v,w]"] --> E["Stored as action label"]
+  C --> F["One set buffer"]
+  E --> F
+  F --> G["save: set_XXXX.npz<br/>images/actions/image_source"]
+  G --> H["ACT Train:<br/>load all matching-format sets"]
+  H --> I["Frame tensor resize to 84x84"]
+  I --> J["Sequence builder (length=8)<br/>no cross-set mixing"]
+  J --> K["ACTPolicy training (MSE)"]
+  K --> L["Inference:<br/>rolling frame buffer -> predict [v,w]"]
+          </div>
+        </section>
+
+        <section class="card wide">
+          <h2>4) ACT Model Internals (Training + Inference)</h2>
+          <p>CNN encoder + fixed sinusoidal positional encoding + transformer + action head.</p>
+          <div class="mermaid">
+flowchart LR
+  subgraph Input["Input Sequence"]
+    A["x_seq: [B,T,3,84,84]"]
+  end
+
+  subgraph Enc["Per-frame Encoder"]
+    B["Conv(3->6,k5)+ReLU+AvgPool"]
+    C["Conv(6->16,k5)+ReLU+AvgPool"]
+    D["Flatten + Linear -> hidden(128)"]
+  end
+
+  subgraph Pos["Temporal Tokens"]
+    E["Stack frame features -> [B,T,D]"]
+    F["Add fixed sinusoidal pos_embed"]
+    G["LayerNorm"]
+  end
+
+  subgraph Tf["Transformer Encoder x3"]
+    H["MHSA + FFN (gelu)"]
+  end
+
+  subgraph Head["Action Head"]
+    I["Linear 128->64 + ReLU"]
+    J["Linear 64->2 + Tanh"]
+    K["pred_seq: [B,T,2]"]
+  end
+
+  A --> B --> C --> D --> E --> F --> G --> H --> I --> J --> K
+
+  K --> L["Train: MSE(pred_seq, y_seq)"]
+  K --> M["Infer: use last step pred_seq[:, -1, :]"]
+        </div>
+        </section>
+      </div>
+
+      <p class="foot">
+        If Mermaid is blocked in your environment, open this file with internet access or replace CDN import with a local Mermaid bundle.
+      </p>
+    </div>
+  </body>
+</html>
