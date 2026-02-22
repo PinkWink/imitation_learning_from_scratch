@@ -149,7 +149,8 @@ def rollout_bc_policy(
     action_clip: float = DEFAULT_BC_WORLD.action_clip,
     drift: Tuple[float, float] = (0.0, 0.0),
 ) -> np.ndarray:
-    device = get_device()
+    # Always follow the policy device to avoid CPU/CUDA mismatch.
+    device = next(policy.parameters()).device
     x, y = float(start[0]), float(start[1])
     traj = [(x, y)]
 
@@ -189,7 +190,7 @@ def train_dagger_model(
     print("\n=== Train BC baseline ===")
     bc_model = train_bc_model(X_init, Y_init, epochs=pretrain_epochs, lr=lr, verbose_every=200)
 
-    dagger_model = BCPolicy()
+    dagger_model = BCPolicy().to(next(bc_model.parameters()).device)
     dagger_model.load_state_dict(bc_model.state_dict())
 
     x_agg = X_init.copy()
